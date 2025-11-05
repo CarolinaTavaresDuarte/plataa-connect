@@ -104,7 +104,7 @@ const mockPatients: PatientRow[] = [
   },
 ];
 
-const DashboardEspecialista = ({ user }: Props) => {
+export const DashboardEspecialista = ({ user }: Props) => {
   const navigate = useNavigate();
   const specialistName = user.user_metadata?.nome_completo || user.email || "Especialista";
 
