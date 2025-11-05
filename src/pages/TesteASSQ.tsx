@@ -294,6 +294,10 @@ const TesteASSQ = () => {
     );
   }
 
+  const currentQuestion = perguntas[currentIndex];
+  const answer = respostas[currentIndex] ?? undefined;
+  const progressValue = ((currentIndex + 1) / perguntas.length) * 100;
+
   return (
     <div className="min-h-screen bg-white">
       <Header />

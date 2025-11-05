@@ -385,3 +385,5 @@ export const DashboardEspecialista = ({ user }: Props) => {
     </div>
   );
 };
+
+export { DashboardEspecialista };
