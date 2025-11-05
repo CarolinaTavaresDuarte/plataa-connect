@@ -14,6 +14,7 @@ import TesteAQ10 from "./pages/TesteAQ10";
 import DadosPreTeste from "./pages/DadosPreTeste";
 import SelecionarTeste from "./pages/SelecionarTeste";
 import NotFound from "./pages/NotFound";
+import ServiceDetail from "./pages/ServiceDetail";
 
 const queryClient = new QueryClient();
 
@@ -33,6 +34,7 @@ const App = () => (
         <Route path="/testes/mchat" element={<TesteMChat />} />
         <Route path="/testes/assq" element={<TesteASSQ />} />
         <Route path="/testes/aq10" element={<TesteAQ10 />} />
+        <Route path="/services/test/:slug" element={<ServiceDetail />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

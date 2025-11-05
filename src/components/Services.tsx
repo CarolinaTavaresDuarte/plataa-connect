@@ -9,21 +9,24 @@ const services = [
     title: "M-CHAT-R/F",
     description: "Triagem para crianças de 16 a 30 meses. Questionário respondido por pais ou responsáveis.",
     age: "16-30 meses",
-    link: "/testes/mchat"
+    link: "/testes/mchat",
+    detailRoute: "/services/test/mchat-rf",
   },
   {
     icon: Users,
     title: "ASSQ",
     description: "Avaliação para crianças e adolescentes de 6 a 17 anos. Pode ser respondido por pais, professores ou o próprio adolescente.",
     age: "6-17 anos",
-    link: "/testes/assq"
+    link: "/testes/assq",
+    detailRoute: "/services/test/assq",
   },
   {
     icon: User,
     title: "AQ-10",
     description: "Questionário de triagem para adultos (16+ anos). Autoavaliação rápida com 10 perguntas.",
     age: "16+ anos",
-    link: "/testes/aq10"
+    link: "/testes/aq10",
+    detailRoute: "/services/test/aq10",
   }
 ];
 
@@ -42,9 +45,9 @@ export const Services = () => {
 
         <div className="grid md:grid-cols-3 gap-8">
           {services.map((service, index) => (
-            <Card 
-              key={index} 
-              className="p-6 hover:shadow-elegant transition-smooth hover:-translate-y-2 bg-card cursor-pointer border-2 hover:border-primary/20"
+            <Card
+              key={index}
+              className="p-6 hover:shadow-elegant transition-smooth hover:-translate-y-2 bg-card border border-transparent hover:border-primary/30"
             >
               <div className="flex flex-col items-center text-center">
                 <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center mb-4 shadow-md">
@@ -55,12 +58,21 @@ export const Services = () => {
                 <p className="text-muted-foreground mb-6 flex-grow">
                   {service.description}
                 </p>
-                <Button 
-                  onClick={() => navigate("/dados-pre-teste", { state: { testeDestino: service.link } })}
-                  className="mt-auto w-full"
-                >
-                  Realizar Teste
-                </Button>
+                <div className="flex flex-col gap-3 w-full">
+                  <Button
+                    variant="outline"
+                    onClick={() => navigate(service.detailRoute)}
+                    className="w-full border-primary text-primary hover:bg-primary hover:text-white"
+                  >
+                    Read more
+                  </Button>
+                  <Button
+                    onClick={() => navigate("/dados-pre-teste", { state: { testeDestino: service.link } })}
+                    className="w-full"
+                  >
+                    Iniciar Triagem
+                  </Button>
+                </div>
               </div>
             </Card>
           ))}
