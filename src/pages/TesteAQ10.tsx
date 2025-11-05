@@ -27,6 +27,18 @@ const perguntas = [
 
 type Resultado = {
   triagemPositiva: boolean;
+  pontuacao: number;
+};
+
+const loadSubjectFromStorage = () => {
+  const stored = sessionStorage.getItem(STORAGE_KEY);
+  if (!stored) return null;
+  try {
+    return JSON.parse(stored) as ScreeningSubject & { screening_subject_id?: string };
+  } catch (error) {
+    console.warn("Erro ao recuperar dados de sessão do AQ-10", error);
+    return null;
+  }
 };
 
 const TesteAQ10 = () => {
@@ -35,6 +47,7 @@ const TesteAQ10 = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [subject, setSubject] = useState<(ScreeningSubject & { screening_subject_id?: string }) | null>(null);
   const [introCompleted, setIntroCompleted] = useState(false);
   const [consentimentoPesquisa, setConsentimentoPesquisa] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -42,29 +55,17 @@ const TesteAQ10 = () => {
   const [resultado, setResultado] = useState<Resultado | null>(null);
 
   useEffect(() => {
-    checkUserAndProfile();
-  }, [navigate]);
-
-  const checkUserAndProfile = async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session) {
-      navigate("/auth");
-      return;
-    }
+    const initialise = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
       if (!session) {
         navigate("/auth");
         return;
       }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("documento_cpf, teste_realizado")
-      .eq("user_id", session.user.id)
-      .single();
+      setUserId(session.user.id);
 
       const navState = location.state as ScreeningNavigationState | undefined;
       if (navState?.subject) {
@@ -118,6 +119,8 @@ const TesteAQ10 = () => {
     return pontos;
   };
 
+  const progresso = useMemo(() => ((currentIndex + 1) / perguntas.length) * 100, [currentIndex]);
+
   const handleNext = () => {
     if (currentIndex < perguntas.length - 1) {
       setCurrentIndex((prev) => prev + 1);
@@ -131,7 +134,7 @@ const TesteAQ10 = () => {
   };
 
   const handleSubmit = async () => {
-    if (!userId) {
+    if (!userId || !subject) {
       toast.error("Erro de autenticação");
       return;
     }
@@ -149,6 +152,8 @@ const TesteAQ10 = () => {
     try {
       const { error } = await supabase.from("aq10_responses").insert({
         user_id: userId,
+        screening_subject_id: subject.screening_subject_id ?? null,
+        documento_cpf: subject.documento_cpf,
         respostas,
         pontuacao_total: pontuacao,
         triagem_positiva: triagemPositiva,
@@ -157,12 +162,21 @@ const TesteAQ10 = () => {
 
       if (error) throw error;
 
-      await supabase
-        .from("profiles")
-        .update({ teste_realizado: true })
-        .eq("user_id", userId);
+      const { error: ibgeError } = await supabase.from("ibge_analysis_records").insert({
+        owner_user_id: userId,
+        test_type: "aq10",
+        faixa_etaria: "Adulto 16+",
+        regiao_geografica: subject.regiao_bairro,
+        score_bruto: pontuacao,
+        consentimento_pesquisa: consentimentoPesquisa,
+      });
 
-      setResultado({ triagemPositiva });
+      if (ibgeError) {
+        console.warn("Falha ao registrar dado anonimizado", ibgeError);
+      }
+
+      sessionStorage.removeItem(STORAGE_KEY);
+      setResultado({ triagemPositiva, pontuacao });
       toast.success("Teste concluído com sucesso!");
     } catch (error: any) {
       if (error?.message?.includes("duplicate key value")) {
@@ -192,37 +206,43 @@ const TesteAQ10 = () => {
             <CardHeader>
               <CardTitle className="text-3xl text-primary text-center">Resultado AQ-10</CardTitle>
               <CardDescription className="text-center">
-                Interpretação direta da triagem para apoiar a tomada de decisão.
+                Resultado interpretativo baseado na soma de pontos. Utilize para buscar orientação com especialista.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6 text-sm text-muted-foreground">
+            <CardContent className="space-y-6">
               <div className="text-center space-y-2">
                 <p className="text-sm text-muted-foreground">Classificação atual</p>
-                <p className={`text-2xl font-bold ${resultado.triagemPositiva ? "text-orange-600" : "text-green-600"}`}>
+                <p className={`text-2xl font-bold ${resultado.triagemPositiva ? "text-red-600" : "text-green-600"}`}>
                   {resultado.triagemPositiva ? "Triagem positiva" : "Triagem negativa"}
                 </p>
+                <p className="text-sm text-muted-foreground">Pontuação: {resultado.pontuacao} de 10</p>
               </div>
-              {resultado.triagemPositiva ? (
-                <p>
-                  Há indícios relevantes de traços associados ao espectro autista. Recomendamos encaminhar para avaliação clínica
-                  especializada para confirmação diagnóstica.
-                </p>
-              ) : (
-                <p>
-                  Os resultados não apontam para risco elevado. Se existirem dúvidas clínicas, considere avaliação complementar ou
-                  repita a triagem em outro momento.
-                </p>
-              )}
-              <div className="bg-blue-50 border-l-4 border-primary p-4">
-                O AQ-10 é uma ferramenta rápida de rastreio. Apenas profissionais especializados podem realizar diagnóstico
-                conclusivo.
+              <div className="bg-muted p-6 rounded-lg space-y-3 text-sm text-muted-foreground">
+                {resultado.triagemPositiva ? (
+                  <p>
+                    O resultado sugere sinais relevantes associados ao TEA. Busque avaliação com equipe especializada para
+                    investigar com mais profundidade e planejar os próximos passos.
+                  </p>
+                ) : (
+                  <p>
+                    O resultado indica baixo risco com base no AQ-10. Se novas preocupações surgirem, considere repetir a triagem ou
+                    buscar orientação profissional.
+                  </p>
+                )}
+              </div>
+              <div className="bg-blue-50 border-l-4 border-primary p-4 text-sm text-muted-foreground">
+                Este questionário é um instrumento de triagem. Ele não substitui avaliação diagnóstica completa.
               </div>
               <div className="flex gap-4 flex-col md:flex-row">
                 <Button onClick={() => navigate("/dashboard")} className="flex-1">
                   Voltar ao dashboard
                 </Button>
-                <Button onClick={() => navigate("/selecionar-teste")} variant="outline" className="flex-1">
-                  Realizar outro teste
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/dados-pre-teste", { state: { testeDestino: "/testes/aq10" } })}
+                  className="flex-1"
+                >
+                  Iniciar nova triagem
                 </Button>
               </div>
             </CardContent>
@@ -240,102 +260,111 @@ const TesteAQ10 = () => {
     <div className="min-h-screen bg-white">
       <Header />
       <main className="container mx-auto px-4 pt-24 pb-12">
-        <Card className="max-w-3xl mx-auto p-8">
-          {!introCompleted ? (
-            <div className="space-y-6">
-              <CardTitle className="text-3xl text-primary">AQ-10</CardTitle>
-              <p className="text-muted-foreground">
-                Autoavaliação rápida para adultos e adolescentes (16+). Avalie o quanto você concorda com cada afirmação com base
-                nos últimos meses.
-              </p>
-              <div className="flex items-start gap-3">
-                <Checkbox checked={consentimentoPesquisa} onCheckedChange={(checked) => setConsentimentoPesquisa(!!checked)} />
-                <span className="text-sm text-muted-foreground">
-                  ✅ Aceito compartilhar os dados desta avaliação de forma anônima para fins de pesquisa.
-                </span>
+        <Card className="max-w-3xl mx-auto shadow-elegant">
+          <CardHeader className="space-y-4">
+            <CardTitle className="text-3xl text-primary text-center">AQ-10</CardTitle>
+            <CardDescription className="text-center text-muted-foreground">
+              Autoavaliação rápida para adultos (16+). Responda com sinceridade e atenção, uma pergunta por vez.
+            </CardDescription>
+            {subject && (
+              <div className="rounded-md border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
+                <p className="font-semibold text-primary">Indivíduo avaliado</p>
+                <p>{subject.nome_completo}</p>
+                <p className="text-xs">CPF: {subject.documento_cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</p>
               </div>
-              <Button
-                size="lg"
-                onClick={() => {
-                  if (!consentimentoPesquisa) {
-                    toast.error("É necessário aceitar o termo de compartilhamento para prosseguir");
-                    return;
-                  }
-                  setIntroCompleted(true);
-                }}
-              >
-                Iniciar questionário
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              <div className="space-y-2">
+            )}
+          </CardHeader>
+
+          <CardContent className="space-y-8">
+            {!introCompleted ? (
+              <div className="space-y-6">
+                <div className="flex items-start gap-3 rounded-md border border-primary/20 bg-primary/5 p-4">
+                  <Checkbox
+                    id="consentimento"
+                    checked={consentimentoPesquisa}
+                    onCheckedChange={(checked) => setConsentimentoPesquisa(!!checked)}
+                  />
+                  <label htmlFor="consentimento" className="text-sm leading-relaxed text-muted-foreground">
+                    ✅ Confirmo o consentimento para compartilhar os dados anonimamente para fins de pesquisa.
+                  </label>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Você verá apenas uma afirmação por vez. Escolha a opção que melhor descreve a frequência com que você concorda ou discorda.
+                </p>
+                <Button
+                  onClick={() => setIntroCompleted(true)}
+                  disabled={!consentimentoPesquisa}
+                  className="w-full"
+                >
+                  Iniciar questionário
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-6">
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
                   <span>
                     Questão {currentIndex + 1} de {perguntas.length}
                   </span>
-                  <span>{progressValue.toFixed(0)}%</span>
+                  <span>{Math.round(progresso)}%</span>
                 </div>
-                <Progress value={progressValue} />
-              </div>
+                <Progress value={progresso} className="h-2" />
 
-              <Card className="border border-primary/20 bg-white">
-                <CardHeader>
-                  <CardTitle className="text-lg">{currentQuestion.texto}</CardTitle>
-                  <CardDescription>Selecione o nível de concordância.</CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-3 md:grid-cols-2">
-                  <Button
-                    type="button"
-                    variant={answer === "concordo_totalmente" ? "default" : "outline"}
-                    className="h-14 text-sm md:text-base"
-                    onClick={() => handleRespostaChange(currentQuestion.id, "concordo_totalmente")}
-                  >
-                    Concordo totalmente
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={answer === "concordo_pouco" ? "default" : "outline"}
-                    className="h-14 text-sm md:text-base"
-                    onClick={() => handleRespostaChange(currentQuestion.id, "concordo_pouco")}
-                  >
-                    Concordo um pouco
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={answer === "discordo_pouco" ? "default" : "outline"}
-                    className="h-14 text-sm md:text-base"
-                    onClick={() => handleRespostaChange(currentQuestion.id, "discordo_pouco")}
-                  >
-                    Discordo um pouco
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={answer === "discordo_totalmente" ? "default" : "outline"}
-                    className="h-14 text-sm md:text-base"
-                    onClick={() => handleRespostaChange(currentQuestion.id, "discordo_totalmente")}
-                  >
-                    Discordo totalmente
-                  </Button>
-                </CardContent>
-              </Card>
+                <div className="bg-white rounded-lg border border-primary/20 p-6 shadow-sm">
+                  <p className="text-lg font-medium text-foreground mb-6">{perguntas[currentIndex].texto}</p>
 
-              <div className="flex flex-col gap-3 md:flex-row md:justify-between">
-                <Button type="button" variant="outline" onClick={handlePrevious} disabled={currentIndex === 0}>
-                  Anterior
-                </Button>
-                {currentIndex === perguntas.length - 1 ? (
-                  <Button type="button" onClick={handleSubmit} disabled={answer === undefined || submitting}>
-                    {submitting ? "Enviando..." : "Enviar resultado"}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Button
+                      type="button"
+                      variant={respostas[perguntas[currentIndex].id] === "concordo_totalmente" ? "default" : "outline"}
+                      className="h-12"
+                      onClick={() => handleRespostaChange(perguntas[currentIndex].id, "concordo_totalmente")}
+                    >
+                      Concordo totalmente
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={respostas[perguntas[currentIndex].id] === "concordo_pouco" ? "default" : "outline"}
+                      className="h-12"
+                      onClick={() => handleRespostaChange(perguntas[currentIndex].id, "concordo_pouco")}
+                    >
+                      Concordo um pouco
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={respostas[perguntas[currentIndex].id] === "discordo_pouco" ? "default" : "outline"}
+                      className="h-12"
+                      onClick={() => handleRespostaChange(perguntas[currentIndex].id, "discordo_pouco")}
+                    >
+                      Discordo um pouco
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={respostas[perguntas[currentIndex].id] === "discordo_totalmente" ? "default" : "outline"}
+                      className="h-12"
+                      onClick={() => handleRespostaChange(perguntas[currentIndex].id, "discordo_totalmente")}
+                    >
+                      Discordo totalmente
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
+                  <Button type="button" variant="outline" onClick={handlePrevious} disabled={currentIndex === 0}>
+                    Anterior
                   </Button>
-                ) : (
-                  <Button type="button" onClick={handleNext} disabled={answer === undefined}>
-                    Próxima
-                  </Button>
-                )}
+                  {currentIndex === perguntas.length - 1 ? (
+                    <Button type="button" onClick={handleSubmit} disabled={submitting}>
+                      {submitting ? "Enviando..." : "Concluir triagem"}
+                    </Button>
+                  ) : (
+                    <Button type="button" onClick={handleNext}>
+                      Próxima
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </CardContent>
         </Card>
       </main>
     </div>

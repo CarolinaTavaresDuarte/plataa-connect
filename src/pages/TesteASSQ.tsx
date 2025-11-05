@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -47,6 +48,24 @@ type Resultado = {
   nivel: "baixo" | "moderado" | "alto";
 };
 
+const loadSubjectFromStorage = () => {
+  const stored = sessionStorage.getItem(STORAGE_KEY);
+  if (!stored) return null;
+  try {
+    return JSON.parse(stored) as ScreeningSubject & { screening_subject_id?: string };
+  } catch (error) {
+    console.warn("Erro ao recuperar dados de sessão do ASSQ", error);
+    return null;
+  }
+};
+
+const faixaEtariaPorAnos = (anos: number) => {
+  if (anos <= 8) return "6-8 anos";
+  if (anos <= 11) return "9-11 anos";
+  if (anos <= 14) return "12-14 anos";
+  return "15-17 anos";
+};
+
 const TesteASSQ = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -63,26 +82,34 @@ const TesteASSQ = () => {
   const [resultado, setResultado] = useState<Resultado | null>(null);
 
   useEffect(() => {
-    checkUserAndProfile();
-  }, [navigate]);
+    const initialise = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-  const checkUserAndProfile = async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+      if (!session) {
+        navigate("/auth");
+        return;
+      }
 
-    if (!session) {
-      navigate("/auth");
-      return;
-    }
+      setUserId(session.user.id);
 
-    setUserId(session.user.id);
+      const navState = location.state as ScreeningNavigationState | undefined;
+      if (navState?.subject) {
+        setSubject(navState.subject);
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(navState.subject));
+      } else {
+        const stored = loadSubjectFromStorage();
+        if (stored) {
+          setSubject(stored);
+        }
+      }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("documento_cpf, teste_realizado")
-      .eq("user_id", session.user.id)
-      .single();
+      setLoading(false);
+    };
+
+    initialise();
+  }, [navigate, location.state]);
 
   useEffect(() => {
     if (!loading && !subject) {
@@ -111,6 +138,8 @@ const TesteASSQ = () => {
     return "alto";
   };
 
+  const progresso = useMemo(() => ((currentIndex + 1) / perguntas.length) * 100, [currentIndex]);
+
   const handleNext = () => {
     if (currentIndex < perguntas.length - 1) {
       setCurrentIndex((prev) => prev + 1);
@@ -124,8 +153,13 @@ const TesteASSQ = () => {
   };
 
   const handleSubmit = async () => {
-    if (!userId) {
+    if (!userId || !subject) {
       toast.error("Erro de autenticação");
+      return;
+    }
+
+    if (!idadeAnos) {
+      toast.error("Informe a idade da pessoa avaliada.");
       return;
     }
 
@@ -154,11 +188,20 @@ const TesteASSQ = () => {
 
       if (error) throw error;
 
-      await supabase
-        .from("profiles")
-        .update({ teste_realizado: true })
-        .eq("user_id", userId);
+      const { error: ibgeError } = await supabase.from("ibge_analysis_records").insert({
+        owner_user_id: userId,
+        test_type: "assq",
+        faixa_etaria: faixaEtariaPorAnos(parseInt(idadeAnos, 10)),
+        regiao_geografica: subject.regiao_bairro,
+        score_bruto: pontuacao,
+        consentimento_pesquisa: consentimentoPesquisa,
+      });
 
+      if (ibgeError) {
+        console.warn("Falha ao registrar dado anonimizado", ibgeError);
+      }
+
+      sessionStorage.removeItem(STORAGE_KEY);
       setResultado({ nivel });
       toast.success("Teste concluído com sucesso!");
     } catch (error: any) {
@@ -189,13 +232,21 @@ const TesteASSQ = () => {
             <CardHeader>
               <CardTitle className="text-3xl text-primary text-center">Resultado ASSQ</CardTitle>
               <CardDescription className="text-center">
-                Orientação resumida com base na triagem preenchida.
+                Interpretação resumida. Compartilhe o resultado com um especialista para orientação clínica completa.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6 text-sm text-muted-foreground">
+            <CardContent className="space-y-6">
               <div className="text-center space-y-2">
                 <p className="text-sm text-muted-foreground">Classificação atual</p>
-                <p className={`text-2xl font-bold ${resultado.nivel === "alto" ? "text-red-600" : resultado.nivel === "moderado" ? "text-yellow-600" : "text-green-600"}`}>
+                <p
+                  className={`text-2xl font-bold ${
+                    resultado.nivel === "alto"
+                      ? "text-red-600"
+                      : resultado.nivel === "moderado"
+                      ? "text-yellow-600"
+                      : "text-green-600"
+                  }`}
+                >
                   {resultado.nivel === "alto"
                     ? "Alto risco"
                     : resultado.nivel === "moderado"
@@ -203,34 +254,37 @@ const TesteASSQ = () => {
                     : "Baixo risco"}
                 </p>
               </div>
-              {resultado.nivel === "baixo" && (
-                <p>
-                  Os sinais observados indicam baixo risco. Mantenha o acompanhamento escolar e familiar, revisitando a triagem se
-                  novas preocupações surgirem.
-                </p>
-              )}
-              {resultado.nivel === "moderado" && (
-                <p>
-                  O resultado sugere risco moderado. Busque orientação junto à equipe pedagógica e considere avaliação clínica para
-                  aprofundamento.
-                </p>
-              )}
-              {resultado.nivel === "alto" && (
-                <p>
-                  O resultado aponta alto risco. Encaminhe o participante para avaliação multidisciplinar especializada o quanto
-                  antes.
-                </p>
-              )}
-              <div className="bg-blue-50 border-l-4 border-primary p-4">
-                Este instrumento é uma triagem e não substitui avaliação diagnóstica completa. Utilize o resultado para orientar
-                os próximos passos com especialistas.
+              <div className="bg-muted p-6 rounded-lg space-y-3 text-sm text-muted-foreground">
+                {resultado.nivel === "baixo" && (
+                  <p>
+                    Os indícios sugerem baixo risco. Continue observando o desenvolvimento socioemocional e repita a triagem
+                    se surgirem novas preocupações.
+                  </p>
+                )}
+                {resultado.nivel === "moderado" && (
+                  <p>
+                    Há sinais moderados. Busque avaliação com profissional especializado e considere estratégias de suporte em casa e na escola.
+                  </p>
+                )}
+                {resultado.nivel === "alto" && (
+                  <p>
+                    O resultado aponta risco elevado. Procure equipe multiprofissional para avaliação diagnóstica e orientações de intervenção.
+                  </p>
+                )}
+              </div>
+              <div className="bg-blue-50 border-l-4 border-primary p-4 text-sm text-muted-foreground">
+                Este questionário é uma triagem e não substitui avaliação clínica. Utilize-o como base para buscar encaminhamento.
               </div>
               <div className="flex gap-4 flex-col md:flex-row">
                 <Button onClick={() => navigate("/dashboard")} className="flex-1">
                   Voltar ao dashboard
                 </Button>
-                <Button onClick={() => navigate("/selecionar-teste")} variant="outline" className="flex-1">
-                  Realizar outro teste
+                <Button
+                  variant="outline"
+                  onClick={() => navigate("/dados-pre-teste", { state: { testeDestino: "/testes/assq" } })}
+                  className="flex-1"
+                >
+                  Iniciar nova triagem
                 </Button>
               </div>
             </CardContent>
@@ -248,124 +302,122 @@ const TesteASSQ = () => {
     <div className="min-h-screen bg-white">
       <Header />
       <main className="container mx-auto px-4 pt-24 pb-12">
-        <Card className="max-w-3xl mx-auto p-8">
-          {!introCompleted ? (
-            <div className="space-y-6">
-              <CardTitle className="text-3xl text-primary">ASSQ</CardTitle>
-              <p className="text-muted-foreground">
-                Questionário para crianças e adolescentes de 6 a 17 anos. Classifique cada afirmação de acordo com a intensidade
-                observada no último semestre.
-              </p>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Idade (em anos)</label>
-                  <Input
-                    type="number"
-                    min="6"
-                    max="17"
-                    value={idadeAnos}
-                    onChange={(e) => setIdadeAnos(e.target.value)}
-                    placeholder="Ex: 10"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Quem está respondendo</label>
-                  <select
-                    value={quemResponde}
-                    onChange={(e) => setQuemResponde(e.target.value as "adolescente" | "pais" | "professores")}
-                    className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    <option value="adolescente">O próprio adolescente</option>
-                    <option value="pais">Pais</option>
-                    <option value="professores">Professores</option>
-                  </select>
-                </div>
+        <Card className="max-w-3xl mx-auto shadow-elegant">
+          <CardHeader className="space-y-4">
+            <CardTitle className="text-3xl text-primary text-center">ASSQ</CardTitle>
+            <CardDescription className="text-center text-muted-foreground">
+              Avaliação para crianças e adolescentes entre 6 e 17 anos. Responda com calma, pensando nas situações do dia a dia.
+            </CardDescription>
+            {subject && (
+              <div className="rounded-md border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
+                <p className="font-semibold text-primary">Indivíduo avaliado</p>
+                <p>{subject.nome_completo}</p>
+                <p className="text-xs">CPF: {subject.documento_cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</p>
               </div>
-              <div className="flex items-start gap-3">
-                <Checkbox checked={consentimentoPesquisa} onCheckedChange={(checked) => setConsentimentoPesquisa(!!checked)} />
-                <span className="text-sm text-muted-foreground">
-                  ✅ Aceito compartilhar os dados desta avaliação de forma anônima para fins de pesquisa.
-                </span>
+            )}
+          </CardHeader>
+
+          <CardContent className="space-y-8">
+            {!introCompleted ? (
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="idade" className="text-sm font-medium text-muted-foreground">
+                      Idade da pessoa avaliada (em anos) *
+                    </Label>
+                    <Input
+                      id="idade"
+                      type="number"
+                      min={6}
+                      max={17}
+                      value={idadeAnos}
+                      onChange={(e) => setIdadeAnos(e.target.value)}
+                      className="mt-2"
+                    />
+                  </div>
+                  <div className="space-y-3 text-sm text-muted-foreground">
+                    <p>Quem está respondendo?</p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      {(["pais", "professores", "adolescente"] as const).map((tipo) => (
+                        <Button
+                          key={tipo}
+                          type="button"
+                          variant={quemResponde === tipo ? "default" : "outline"}
+                          onClick={() => setQuemResponde(tipo)}
+                          className="capitalize"
+                        >
+                          {tipo}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 rounded-md border border-primary/20 bg-primary/5 p-4">
+                    <Checkbox
+                      id="consentimento"
+                      checked={consentimentoPesquisa}
+                      onCheckedChange={(checked) => setConsentimentoPesquisa(!!checked)}
+                    />
+                    <Label htmlFor="consentimento" className="text-sm leading-relaxed text-muted-foreground">
+                      ✅ Confirmo o consentimento para compartilhar os dados anonimamente para fins de pesquisa.
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Cada pergunta possui três opções (0, 1, 2). Use a que melhor descreve a frequência do comportamento.
+                  </p>
+                </div>
+                <Button
+                  onClick={() => setIntroCompleted(true)}
+                  disabled={!idadeAnos || !consentimentoPesquisa}
+                  className="w-full"
+                >
+                  Iniciar questionário
+                </Button>
               </div>
-              <Button
-                size="lg"
-                onClick={() => {
-                  if (!idadeAnos) {
-                    toast.error("Informe a idade");
-                    return;
-                  }
-                  if (!consentimentoPesquisa) {
-                    toast.error("É necessário aceitar o termo de compartilhamento para prosseguir");
-                    return;
-                  }
-                  setIntroCompleted(true);
-                }}
-              >
-                Iniciar questionário
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              <div className="space-y-2">
+            ) : (
+              <div className="space-y-6">
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
                   <span>
                     Questão {currentIndex + 1} de {perguntas.length}
                   </span>
-                  <span>{progressValue.toFixed(0)}%</span>
+                  <span>{Math.round(progresso)}%</span>
                 </div>
-                <Progress value={progressValue} />
-              </div>
+                <Progress value={progresso} className="h-2" />
 
-              <Card className="border border-primary/20 bg-white">
-                <CardHeader>
-                  <CardTitle className="text-lg">{currentQuestion}</CardTitle>
-                  <CardDescription>Escolha a opção que representa a intensidade observada.</CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-3 md:grid-cols-3">
-                  <Button
-                    type="button"
-                    variant={answer === 0 ? "default" : "outline"}
-                    className="h-14 text-base"
-                    onClick={() => handleRespostaChange(currentIndex, 0)}
-                  >
-                    Não
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={answer === 1 ? "default" : "outline"}
-                    className="h-14 text-base"
-                    onClick={() => handleRespostaChange(currentIndex, 1)}
-                  >
-                    Um pouco
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={answer === 2 ? "default" : "outline"}
-                    className="h-14 text-base"
-                    onClick={() => handleRespostaChange(currentIndex, 2)}
-                  >
-                    Sim
-                  </Button>
-                </CardContent>
-              </Card>
+                <div className="bg-white rounded-lg border border-primary/20 p-6 shadow-sm">
+                  <p className="text-lg font-medium text-foreground mb-6">{perguntas[currentIndex]}</p>
 
-              <div className="flex flex-col gap-3 md:flex-row md:justify-between">
-                <Button type="button" variant="outline" onClick={handlePrevious} disabled={currentIndex === 0}>
-                  Anterior
-                </Button>
-                {currentIndex === perguntas.length - 1 ? (
-                  <Button type="button" onClick={handleSubmit} disabled={answer === undefined || submitting}>
-                    {submitting ? "Enviando..." : "Enviar resultado"}
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {[0, 1, 2].map((valor) => (
+                      <Button
+                        key={valor}
+                        type="button"
+                        variant={respostas[currentIndex] === valor ? "default" : "outline"}
+                        className="h-12"
+                        onClick={() => handleRespostaChange(currentIndex, valor)}
+                      >
+                        {valor === 0 ? "Não" : valor === 1 ? "Às vezes" : "Sim"}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
+                  <Button type="button" variant="outline" onClick={handlePrevious} disabled={currentIndex === 0}>
+                    Anterior
                   </Button>
-                ) : (
-                  <Button type="button" onClick={handleNext} disabled={answer === undefined}>
-                    Próxima
-                  </Button>
-                )}
+                  {currentIndex === perguntas.length - 1 ? (
+                    <Button type="button" onClick={handleSubmit} disabled={submitting}>
+                      {submitting ? "Enviando..." : "Concluir triagem"}
+                    </Button>
+                  ) : (
+                    <Button type="button" onClick={handleNext}>
+                      Próxima
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </CardContent>
         </Card>
       </main>
     </div>
