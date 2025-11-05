@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect, useState } from "react";
@@ -6,7 +6,9 @@ import { User } from "@supabase/supabase-js";
 
 export const Header = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState<User | null>(null);
+  const [activeSection, setActiveSection] = useState<string>("");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -21,6 +23,34 @@ export const Header = () => {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (location.pathname !== "/landing") {
+      setActiveSection("");
+      return;
+    }
+
+    const sectionIds = ["inicio", "sobre", "servicos", "como-funciona", "contato"];
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setActiveSection(entry.target.id);
+          }
+        });
+      },
+      { rootMargin: "-40% 0px -40% 0px", threshold: 0.2 },
+    );
+
+    sectionIds.forEach((id) => {
+      const element = document.getElementById(id);
+      if (element) {
+        observer.observe(element);
+      }
+    });
+
+    return () => observer.disconnect();
+  }, [location.pathname]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -47,31 +77,41 @@ export const Header = () => {
               <>
                 <button
                   onClick={() => scrollToSection("inicio")}
-                  className="hover:bg-primary-hover px-3 py-2 rounded transition-smooth"
+                  className={`px-3 py-2 rounded transition-smooth hover:bg-[#0056b3] ${
+                    activeSection === "inicio" ? "bg-[#0056b3]" : ""
+                  }`}
                 >
                   Início
                 </button>
                 <button
                   onClick={() => scrollToSection("sobre")}
-                  className="hover:bg-primary-hover px-3 py-2 rounded transition-smooth"
+                  className={`px-3 py-2 rounded transition-smooth hover:bg-[#0056b3] ${
+                    activeSection === "sobre" ? "bg-[#0056b3]" : ""
+                  }`}
                 >
                   Sobre
                 </button>
                 <button
                   onClick={() => scrollToSection("servicos")}
-                  className="hover:bg-primary-hover px-3 py-2 rounded transition-smooth"
+                  className={`px-3 py-2 rounded transition-smooth hover:bg-[#0056b3] ${
+                    activeSection === "servicos" ? "bg-[#0056b3]" : ""
+                  }`}
                 >
                   Serviços
                 </button>
                 <button
                   onClick={() => scrollToSection("como-funciona")}
-                  className="hover:bg-primary-hover px-3 py-2 rounded transition-smooth"
+                  className={`px-3 py-2 rounded transition-smooth hover:bg-[#0056b3] ${
+                    activeSection === "como-funciona" ? "bg-[#0056b3]" : ""
+                  }`}
                 >
                   Como Funciona
                 </button>
                 <button
                   onClick={() => scrollToSection("contato")}
-                  className="hover:bg-primary-hover px-3 py-2 rounded transition-smooth"
+                  className={`px-3 py-2 rounded transition-smooth hover:bg-[#0056b3] ${
+                    activeSection === "contato" ? "bg-[#0056b3]" : ""
+                  }`}
                 >
                   Contato
                 </button>
