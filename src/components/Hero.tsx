@@ -17,23 +17,22 @@ export const Hero = () => {
           backgroundImage: "url('https://images.unsplash.com/photo-1516627145497-ae6968895b74?q=80&w=2070')",
         }}
       />
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/90 via-primary/80 to-primary/70" />
       
-      <div className="relative z-10 container mx-auto px-4 py-20 text-center text-white">
-        <h1 className="text-5xl md:text-6xl font-bold mb-6 animate-fade-in">
+      <div className="relative z-10 container mx-auto px-4 py-20 text-center">
+        <h1 className="text-5xl md:text-6xl font-bold mb-6 animate-fade-in text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
           Plataa
         </h1>
-        <p className="text-2xl md:text-3xl mb-4 font-semibold">
+        <p className="text-2xl md:text-3xl mb-4 font-semibold text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
           Plataforma de Triagem e Atendimento ao Autista
         </p>
-        <p className="text-lg md:text-xl mb-8 max-w-3xl mx-auto opacity-90">
+        <p className="text-lg md:text-xl mb-8 max-w-3xl mx-auto text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
           Ferramentas especializadas para identificação precoce e suporte ao Transtorno do Espectro Autista (TEA)
         </p>
         
         <Button 
           size="lg" 
           onClick={scrollToServicos}
-          className="bg-white text-primary hover:bg-white/90 shadow-elegant text-lg px-8 py-6 gap-2 transition-smooth"
+          className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg text-lg px-8 py-6 gap-2 transition-smooth"
         >
           Ver Serviços
           <ArrowRight className="h-5 w-5" />
