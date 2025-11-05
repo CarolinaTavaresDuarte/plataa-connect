@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -149,12 +150,17 @@ const DashboardUsuario = ({ user }: Props) => {
         setConsentLastTest((prev) => prev ?? aq10Data[0].consentimento_pesquisa ?? null);
       }
 
-      setTestResults(results);
-      setLoading(false);
-    };
+  const userName = user.user_metadata?.nome_completo || user.email?.split("@")[0] || "Usuário";
 
-    fetchUserData();
-  }, [user.id]);
+  const chartData = useMemo(
+    () =>
+      mockTestResults.map((result) => ({
+        teste: result.teste,
+        riscos:
+          result.riskCategory === "high" ? 3 : result.riskCategory === "moderate" ? 2 : 1,
+      })),
+    [],
+  );
 
   const chartData = useMemo(
     () =>
@@ -165,13 +171,18 @@ const DashboardUsuario = ({ user }: Props) => {
     [testResults],
   );
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  const recursosEducativos = [
+    {
+      titulo: "Guia para famílias",
+      descricao: "Orientações práticas sobre rotinas, comunicação e direitos da pessoa com TEA.",
+      acao: "Ler material",
+    },
+    {
+      titulo: "Agenda de oficinas",
+      descricao: "Programação de encontros educativos oferecidos pela Plataa e parceiros regionais.",
+      acao: "Ver agenda",
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-background">

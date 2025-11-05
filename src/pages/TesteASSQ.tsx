@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,9 @@ import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import type { ScreeningNavigationState, ScreeningSubject } from "@/types/screening";
+
+const STORAGE_KEY = "screening:assq";
 
 const perguntas = [
   "É desajeitado(a) em seus movimentos",
@@ -46,9 +49,11 @@ type Resultado = {
 
 const TesteASSQ = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [subject, setSubject] = useState<(ScreeningSubject & { screening_subject_id?: string }) | null>(null);
   const [idadeAnos, setIdadeAnos] = useState("");
   const [quemResponde, setQuemResponde] = useState<"adolescente" | "pais" | "professores">("pais");
   const [consentimentoPesquisa, setConsentimentoPesquisa] = useState(false);
@@ -79,23 +84,21 @@ const TesteASSQ = () => {
       .eq("user_id", session.user.id)
       .single();
 
-    if (!profile?.documento_cpf) {
-      toast.error("Por favor, preencha seus dados antes de iniciar o teste");
+  useEffect(() => {
+    if (!loading && !subject) {
+      toast.error("Informe os dados do indivíduo antes de iniciar o ASSQ.");
       navigate("/dados-pre-teste", { state: { testeDestino: "/testes/assq" } });
-      return;
     }
+  }, [loading, subject, navigate]);
 
-    if (profile.teste_realizado) {
-      toast.error("Você já realizou uma triagem anteriormente");
-      navigate("/dashboard");
-      return;
+  useEffect(() => {
+    if (subject) {
+      setConsentimentoPesquisa(subject.consentimento_pesquisa);
     }
-
-    setLoading(false);
-  };
+  }, [subject]);
 
   const handleRespostaChange = (index: number, valor: number) => {
-    setRespostas({ ...respostas, [index]: valor });
+    setRespostas((prev) => ({ ...prev, [index]: valor }));
   };
 
   const calcularPontuacao = () => {
@@ -139,7 +142,9 @@ const TesteASSQ = () => {
     try {
       const { error } = await supabase.from("assq_responses").insert({
         user_id: userId,
-        idade_anos: parseInt(idadeAnos),
+        screening_subject_id: subject.screening_subject_id ?? null,
+        documento_cpf: subject.documento_cpf,
+        idade_anos: parseInt(idadeAnos, 10),
         quem_responde: quemResponde,
         respostas,
         pontuacao_total: pontuacao,
@@ -157,15 +162,19 @@ const TesteASSQ = () => {
       setResultado({ nivel });
       toast.success("Teste concluído com sucesso!");
     } catch (error: any) {
-      toast.error("Erro ao salvar teste: " + error.message);
+      if (error?.message?.includes("duplicate key value")) {
+        toast.error("Este CPF já possui uma resposta registrada para o ASSQ.");
+      } else {
+        toast.error("Erro ao salvar teste: " + (error.message ?? "tente novamente"));
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (loading) {
+  if (loading || (!subject && !resultado)) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-muted">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -236,7 +245,7 @@ const TesteASSQ = () => {
   const progressValue = ((currentIndex + 1) / perguntas.length) * 100;
 
   return (
-    <div className="min-h-screen bg-muted">
+    <div className="min-h-screen bg-white">
       <Header />
       <main className="container mx-auto px-4 pt-24 pb-12">
         <Card className="max-w-3xl mx-auto p-8">

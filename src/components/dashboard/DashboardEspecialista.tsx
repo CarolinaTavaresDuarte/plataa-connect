@@ -1,48 +1,3 @@
-import { useEffect, useMemo, useState } from "react";
-import type { User } from "@supabase/supabase-js";
-import { Header } from "@/components/Header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/integrations/supabase/client";
-import { Download, Users, BarChart3, ClipboardList, FileSpreadsheet } from "lucide-react";
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import { useNavigate } from "react-router-dom";
-import { Loader2 } from "lucide-react";
-
-interface Props {
-  user: User;
-}
-
-type PatientRow = {
-  id: string;
-  nome: string;
-  regiao: string | null;
-  contatoTelefone: string | null;
-  contatoEmail: string | null;
-  documentoCpf: string | null;
-  risco: RiskBadge;
-  teste: string;
-  data: string;
-};
-
 type RiskBadge = "Baixo" | "Moderado" | "Alto";
 
 const chartConfig = {
@@ -242,7 +197,7 @@ export const DashboardEspecialista = ({ user }: Props) => {
   }
 
   return (
-    <div className="min-h-screen bg-muted">
+    <div className="min-h-screen bg-background">
       <Header />
 
       <main className="container mx-auto px-4 pt-24 pb-12 space-y-8">

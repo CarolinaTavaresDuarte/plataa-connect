@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,9 @@ import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import type { ScreeningNavigationState, ScreeningSubject } from "@/types/screening";
+
+const STORAGE_KEY = "screening:aq10";
 
 const perguntas = [
   { id: 1, texto: "Costumo notar pequenos detalhes que outros não percebem", pontuaConcordo: true },
@@ -28,6 +31,7 @@ type Resultado = {
 
 const TesteAQ10 = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -51,7 +55,10 @@ const TesteAQ10 = () => {
       return;
     }
 
-    setUserId(session.user.id);
+      if (!session) {
+        navigate("/auth");
+        return;
+      }
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -59,23 +66,38 @@ const TesteAQ10 = () => {
       .eq("user_id", session.user.id)
       .single();
 
-    if (!profile?.documento_cpf) {
-      toast.error("Por favor, preencha seus dados antes de iniciar o teste");
+      const navState = location.state as ScreeningNavigationState | undefined;
+      if (navState?.subject) {
+        setSubject(navState.subject);
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(navState.subject));
+      } else {
+        const stored = loadSubjectFromStorage();
+        if (stored) {
+          setSubject(stored);
+        }
+      }
+
+      setLoading(false);
+    };
+
+    initialise();
+  }, [navigate, location.state]);
+
+  useEffect(() => {
+    if (!loading && !subject) {
+      toast.error("Informe os dados do indivíduo antes de iniciar o AQ-10.");
       navigate("/dados-pre-teste", { state: { testeDestino: "/testes/aq10" } });
-      return;
     }
+  }, [loading, subject, navigate]);
 
-    if (profile.teste_realizado) {
-      toast.error("Você já realizou uma triagem anteriormente");
-      navigate("/dashboard");
-      return;
+  useEffect(() => {
+    if (subject) {
+      setConsentimentoPesquisa(subject.consentimento_pesquisa);
     }
-
-    setLoading(false);
-  };
+  }, [subject]);
 
   const handleRespostaChange = (id: number, valor: string) => {
-    setRespostas({ ...respostas, [id]: valor });
+    setRespostas((prev) => ({ ...prev, [id]: valor }));
   };
 
   const calcularPontuacao = () => {
@@ -143,15 +165,19 @@ const TesteAQ10 = () => {
       setResultado({ triagemPositiva });
       toast.success("Teste concluído com sucesso!");
     } catch (error: any) {
-      toast.error("Erro ao salvar teste: " + error.message);
+      if (error?.message?.includes("duplicate key value")) {
+        toast.error("Este CPF já possui uma resposta registrada para o AQ-10.");
+      } else {
+        toast.error("Erro ao salvar teste: " + (error.message ?? "tente novamente"));
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (loading) {
+  if (loading || (!subject && !resultado)) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-muted">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -211,7 +237,7 @@ const TesteAQ10 = () => {
   const progressValue = ((currentIndex + 1) / perguntas.length) * 100;
 
   return (
-    <div className="min-h-screen bg-muted">
+    <div className="min-h-screen bg-white">
       <Header />
       <main className="container mx-auto px-4 pt-24 pb-12">
         <Card className="max-w-3xl mx-auto p-8">

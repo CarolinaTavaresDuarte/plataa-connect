@@ -93,7 +93,10 @@ const SelecionarTeste = () => {
             </li>
             <li className="flex items-start gap-2">
               <span className="text-primary font-bold">•</span>
-              <span>Cada CPF pode realizar a triagem apenas <strong>uma única vez</strong>.</span>
+              <span>
+                Cada CPF pode realizar a triagem apenas <strong>uma vez por tipo de teste</strong>. Para outro instrumento, um novo
+                registro é permitido.
+              </span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-primary font-bold">•</span>
