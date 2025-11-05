@@ -44,8 +44,13 @@ export const About = () => {
               </div>
             </div>
 
-            <Button onClick={scrollToContato} variant="outline" size="lg" className="border-2 hover:bg-muted transition-smooth">
-              Entre em Contato
+            <Button
+              onClick={scrollToContato}
+              variant="outline"
+              size="lg"
+              className="border border-black text-black hover:bg-black/5 transition-smooth"
+            >
+              Get in touch
             </Button>
           </div>
           
