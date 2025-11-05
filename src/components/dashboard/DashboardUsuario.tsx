@@ -299,3 +299,77 @@ export const DashboardUsuario = ({ user }: Props) => {
     </div>
   );
 };
+
+export { DashboardUsuario };
+
+function normalizarNivel(nivel: string): RiskCategory {
+  const cleaned = nivel.toLowerCase();
+  return riskMap[cleaned] ?? (cleaned.includes("alto") ? "high" : cleaned.includes("moder") ? "moderate" : "low");
+}
+
+function riskIcon(category: RiskCategory) {
+  switch (category) {
+    case "low":
+      return <CheckCircle className="h-6 w-6 text-green-500" />;
+    case "moderate":
+      return <Info className="h-6 w-6 text-yellow-500" />;
+    default:
+      return <AlertCircle className="h-6 w-6 text-red-500" />;
+  }
+}
+
+function riskTextColor(category: RiskCategory) {
+  switch (category) {
+    case "low":
+      return "border-green-200 text-green-600";
+    case "moderate":
+      return "border-yellow-200 text-yellow-600";
+    default:
+      return "border-red-200 text-red-600";
+  }
+}
+
+function riskValue(category: RiskCategory) {
+  switch (category) {
+    case "low":
+      return 1;
+    case "moderate":
+      return 2;
+    default:
+      return 3;
+  }
+}
+
+function formatRiskLabel(label: string) {
+  const normalized = label.trim().toLowerCase();
+  if (normalized.includes("baixo")) return "Baixo risco";
+  if (normalized.includes("moder")) return "Risco moderado";
+  if (normalized.includes("neg")) return "Triagem Negativa";
+  if (normalized.includes("pos")) return "Triagem Positiva";
+  return "Alto risco";
+}
+
+type QuickActionProps = {
+  icon: typeof FileText;
+  title: string;
+  description: string;
+  onClick: () => void;
+};
+
+const QuickAction = ({ icon: Icon, title, description, onClick }: QuickActionProps) => (
+  <div className="space-y-2">
+    <div className="flex items-start gap-3">
+      <div className="rounded-md bg-primary/10 p-2">
+        <Icon className="h-5 w-5 text-primary" />
+      </div>
+      <div>
+        <p className="font-semibold text-primary">{title}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+    </div>
+    <Button variant="ghost" className="px-0 text-primary hover:text-primary/80" onClick={onClick}>
+      Acessar
+      <ArrowRight className="ml-2 h-4 w-4" />
+    </Button>
+  </div>
+);

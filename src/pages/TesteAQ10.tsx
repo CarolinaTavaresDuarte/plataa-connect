@@ -252,6 +252,10 @@ const TesteAQ10 = () => {
     );
   }
 
+  const currentQuestion = perguntas[currentIndex];
+  const answer = respostas[currentQuestion.id];
+  const progressValue = ((currentIndex + 1) / perguntas.length) * 100;
+
   return (
     <div className="min-h-screen bg-white">
       <Header />
