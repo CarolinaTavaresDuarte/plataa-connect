@@ -1,124 +1,107 @@
-import { useMemo, useState } from "react";
-import type { User } from "@supabase/supabase-js";
-import { Header } from "@/components/Header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Users, FileSpreadsheet } from "lucide-react";
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
-import { Label } from "@/components/ui/label";
-
-interface Props {
-  user: User;
-}
-
 type RiskBadge = "Baixo" | "Moderado" | "Alto";
-
-type PatientRow = {
-  id: string;
-  nome: string;
-  faixaEtaria: string;
-  regiao: string;
-  contato: string;
-  risco: RiskBadge;
-  teste: string;
-  data: string;
-};
 
 const chartConfig = {
   casos: {
     label: "Total de casos",
-    color: "hsl(var(--chart-2))",
+    color: "hsl(var(--chart-1))",
   },
 } satisfies ChartConfig;
 
-const mockPatients: PatientRow[] = [
-  {
-    id: "1",
-    nome: "Ana Beatriz Martins",
-    faixaEtaria: "3-5 anos",
-    regiao: "São Paulo - SP",
-    contato: "(11) 98822-4411",
-    risco: "Alto",
-    teste: "M-CHAT-R/F",
-    data: "04/09/2024",
-  },
-  {
-    id: "2",
-    nome: "João Pedro Araújo",
-    faixaEtaria: "6-8 anos",
-    regiao: "Campinas - SP",
-    contato: "(19) 97744-1200",
-    risco: "Moderado",
-    teste: "ASSQ",
-    data: "12/09/2024",
-  },
-  {
-    id: "3",
-    nome: "Mariana Lopes",
-    faixaEtaria: "12-14 anos",
-    regiao: "Belo Horizonte - MG",
-    contato: "(31) 99901-2333",
-    risco: "Baixo",
-    teste: "ASSQ",
-    data: "22/09/2024",
-  },
-  {
-    id: "4",
-    nome: "Rafael Sousa",
-    faixaEtaria: "Adulto",
-    regiao: "Rio de Janeiro - RJ",
-    contato: "rafael.sousa@email.com",
-    risco: "Moderado",
-    teste: "AQ-10",
-    data: "30/09/2024",
-  },
-  {
-    id: "5",
-    nome: "Laura Pereira",
-    faixaEtaria: "3-5 anos",
-    regiao: "Curitiba - PR",
-    contato: "(41) 91234-4567",
-    risco: "Baixo",
-    teste: "M-CHAT-R/F",
-    data: "05/10/2024",
-  },
-];
-
-const DashboardEspecialista = ({ user }: Props) => {
+export const DashboardEspecialista = ({ user }: Props) => {
   const navigate = useNavigate();
   const specialistName = user.user_metadata?.nome_completo || user.email || "Especialista";
-
+  const [loading, setLoading] = useState(true);
+  const [patients, setPatients] = useState<PatientRow[]>([]);
   const [riskFilter, setRiskFilter] = useState<RiskBadge | "todos">("todos");
   const [regionFilter, setRegionFilter] = useState<string | "todas">("todas");
   const [search, setSearch] = useState("");
 
-  const regions = useMemo(() => {
-    const unique = new Set(mockPatients.map((patient) => patient.regiao));
-    return Array.from(unique).sort((a, b) => a.localeCompare(b));
+  useEffect(() => {
+    const loadData = async () => {
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("user_id, nome_completo, regiao_bairro, contato_telefone, email, documento_cpf")
+        .order("nome_completo", { ascending: true });
+
+      if (profilesError) {
+        setLoading(false);
+        return;
+      }
+
+      const [mchatRes, assqRes, aq10Res] = await Promise.all([
+        supabase
+          .from("mchat_responses")
+          .select("user_id, created_at, nivel_risco")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("assq_responses")
+          .select("user_id, created_at, nivel_risco")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("aq10_responses")
+          .select("user_id, created_at, triagem_positiva")
+          .order("created_at", { ascending: false }),
+      ]);
+
+      const latestByUser = new Map<string, { risco: RiskBadge; teste: string; data: string }>();
+
+      const registerResult = (
+        userId: string,
+        teste: string,
+        nivel: string | boolean,
+        createdAt: string,
+      ) => {
+        const existing = latestByUser.get(userId);
+        if (existing && new Date(existing.data) > new Date(createdAt)) {
+          return;
+        }
+
+        latestByUser.set(userId, {
+          risco: mapRisk(nivel),
+          teste,
+          data: createdAt,
+        });
+      };
+
+      mchatRes?.forEach((item) => registerResult(item.user_id, "M-CHAT-R/F", item.nivel_risco, item.created_at));
+      assqRes?.forEach((item) => registerResult(item.user_id, "ASSQ", item.nivel_risco, item.created_at));
+      aq10Res?.forEach((item) => registerResult(item.user_id, "AQ-10", item.triagem_positiva, item.created_at));
+
+      const rows: PatientRow[] =
+        profiles?.map((profile) => {
+          const latest = latestByUser.get(profile.user_id);
+          return {
+            id: profile.user_id,
+            nome: profile.nome_completo,
+            regiao: profile.regiao_bairro,
+            contatoTelefone: profile.contato_telefone,
+            contatoEmail: profile.email,
+            documentoCpf: profile.documento_cpf,
+            risco: latest?.risco ?? "Baixo",
+            teste: latest?.teste ?? "—",
+            data: latest ? new Date(latest.data).toLocaleDateString("pt-BR") : "—",
+          };
+        }) ?? [];
+
+      setPatients(rows);
+      setLoading(false);
+    };
+
+    loadData();
   }, []);
 
+  const regions = useMemo(() => {
+    const all = new Set<string>();
+    patients.forEach((patient) => {
+      if (patient.regiao) {
+        all.add(patient.regiao);
+      }
+    });
+    return Array.from(all).sort((a, b) => a.localeCompare(b));
+  }, [patients]);
+
   const filteredPatients = useMemo(() => {
-    return mockPatients.filter((patient) => {
+    return patients.filter((patient) => {
       if (riskFilter !== "todos" && patient.risco !== riskFilter) {
         return false;
       }
@@ -127,23 +110,21 @@ const DashboardEspecialista = ({ user }: Props) => {
         return false;
       }
 
-      if (search) {
-        const normalizedSearch = search.toLowerCase();
-        if (
-          !patient.nome.toLowerCase().includes(normalizedSearch) &&
-          !patient.contato.toLowerCase().includes(normalizedSearch)
-        ) {
-          return false;
-        }
+      if (
+        search &&
+        !patient.nome.toLowerCase().includes(search.toLowerCase()) &&
+        !(patient.documentoCpf || "").includes(search)
+      ) {
+        return false;
       }
 
       return true;
     });
-  }, [riskFilter, regionFilter, search]);
+  }, [patients, riskFilter, regionFilter, search]);
 
   const summary = useMemo(() => {
     const total = filteredPatients.length;
-    const contagem = filteredPatients.reduce(
+    const porRisco = filteredPatients.reduce(
       (acc, patient) => {
         acc[patient.risco] = (acc[patient.risco] ?? 0) + 1;
         return acc;
@@ -151,234 +132,202 @@ const DashboardEspecialista = ({ user }: Props) => {
       { Baixo: 0, Moderado: 0, Alto: 0 } as Record<RiskBadge, number>,
     );
 
-    return { total, ...contagem };
+    return {
+      total,
+      baixo: porRisco.Baixo,
+      moderado: porRisco.Moderado,
+      alto: porRisco.Alto,
+    };
   }, [filteredPatients]);
 
   const chartData = useMemo(
     () => [
-      { categoria: "Baixo risco", casos: 10 },
-      { categoria: "Risco moderado", casos: 5 },
-      { categoria: "Alto risco", casos: 2 },
+      { categoria: "Baixo risco", casos: summary.baixo },
+      { categoria: "Risco moderado", casos: summary.moderado },
+      { categoria: "Alto risco", casos: summary.alto },
     ],
-    [],
+    [summary],
   );
 
   const handleExport = () => {
-    toast.success("Exportação simulada: dados enviados para /api/v1/data-export/ibge-analysis");
+    const header = [
+      "Nome",
+      "Região",
+      "Contato",
+      "Email",
+      "CPF",
+      "Último teste",
+      "Data",
+      "Nível de risco",
+    ];
+
+    const csv = [
+      header.join(";"),
+      ...filteredPatients.map((patient) =>
+        [
+          patient.nome,
+          patient.regiao ?? "",
+          patient.contatoTelefone ?? "",
+          patient.contatoEmail ?? "",
+          patient.documentoCpf ?? "",
+          patient.teste,
+          patient.data,
+          patient.risco,
+        ].join(";"),
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "pacientes-triados.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
-  const handleOpenRecord = (patient: PatientRow) => {
-    toast.info(`Abertura simulada da ficha de ${patient.nome}`);
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
 
       <main className="container mx-auto px-4 pt-24 pb-12 space-y-8">
-        <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
-          <CardContent className="pt-6">
-            <h1 className="text-4xl font-bold text-primary mb-2">Bem-vindo, {specialistName}</h1>
-            <p className="text-muted-foreground max-w-2xl">
-              Visualize rapidamente a carteira de triagens, acompanhe indicadores por nível de risco e organize ações prioritárias
-              com seus pacientes.
-            </p>
-          </CardContent>
-        </Card>
+        <div>
+          <h1 className="text-3xl font-bold text-primary mb-2">Gerenciamento de Triagens</h1>
+          <p className="text-muted-foreground">
+            Bem-vindo, {specialistName}. Acesse todas as triagens da sua carteira com transparência e filtros inteligentes.
+          </p>
+        </div>
 
-        <div className="grid gap-6 md:grid-cols-3">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-xl text-primary">Casos ativos</CardTitle>
-              <CardDescription>Total de pacientes com triagens recentes sob sua supervisão.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex items-center justify-between">
-              <div>
-                <p className="text-4xl font-bold text-foreground">{summary.total}</p>
-                <p className="text-sm text-muted-foreground">Resultados filtrados nesta visão</p>
-              </div>
-              <Users className="h-10 w-10 text-primary" />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-xl text-primary">Exportação IBGE</CardTitle>
-              <CardDescription>Dados anonimizados prontos para integração estatística.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Button onClick={handleExport} className="w-full" variant="outline">
-                <FileSpreadsheet className="mr-2 h-4 w-4" /> Exportar lista (CSV)
-              </Button>
-              <p className="text-xs text-muted-foreground">
-                A exportação simula a chamada para <code>/api/v1/data-export/ibge-analysis</code>, respeitando o consentimento de cada triagem.
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-xl text-primary">Triagens recentes</CardTitle>
-              <CardDescription>Planeje seus acompanhamentos com base nas datas mais recentes.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              {mockPatients.slice(0, 3).map((patient) => (
-                <div key={patient.id} className="flex items-center justify-between">
-                  <span>{patient.nome}</span>
-                  <span className="text-xs">{patient.data}</span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <SummaryCard title="Pacientes acompanhados" value={summary.total} icon={Users} />
+          <SummaryCard title="Baixo risco" value={summary.baixo} icon={BarChart3} color="text-green-600" />
+          <SummaryCard title="Risco moderado" value={summary.moderado} icon={ClipboardList} color="text-yellow-600" />
+          <SummaryCard title="Alto risco" value={summary.alto} icon={FileSpreadsheet} color="text-red-600" />
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-xl text-primary">Distribuição por nível de risco</CardTitle>
-            <CardDescription>Dados mockados para orientar priorização de atendimento.</CardDescription>
+            <CardTitle className="text-2xl text-primary">Distribuição de risco</CardTitle>
+            <CardDescription>
+              Visualize como os resultados das triagens estão distribuídos na sua carteira de pacientes.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={chartConfig} className="w-full overflow-x-auto">
-              <BarChart data={chartData} height={260}>
-                <CartesianGrid strokeDasharray="4 4" stroke="hsl(var(--muted-foreground)/0.1)" />
-                <XAxis dataKey="categoria" tick={{ fill: "hsl(var(--muted-foreground))" }} />
-                <YAxis tick={{ fill: "hsl(var(--muted-foreground))" }} allowDecimals={false} />
+            <ChartContainer className="min-h-[260px]" config={chartConfig}>
+              <BarChart data={chartData}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#E5E7EB" />
+                <XAxis dataKey="categoria" tickLine={false} axisLine={false} />
+                <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
                 <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                <Bar dataKey="casos" radius={[6, 6, 0, 0]} fill="var(--color-casos)" />
+                <Bar dataKey="casos" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ChartContainer>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="space-y-4">
-            <div>
-              <CardTitle className="text-xl text-primary">Pacientes triados</CardTitle>
-              <CardDescription>
-                Carteira fictícia com filtros ativos para simular a visão final do painel profissional.
-              </CardDescription>
+          <CardHeader className="gap-4">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <CardTitle className="text-2xl text-primary">Tabela de pacientes triados</CardTitle>
+                <CardDescription>Filtre por risco, região ou busque diretamente pelo nome/CPF.</CardDescription>
+              </div>
+              <Button onClick={handleExport} className="w-full lg:w-auto">
+                <Download className="mr-2 h-4 w-4" /> Exportar lista (CSV)
+              </Button>
             </div>
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-              <div className="flex-1">
-                <Label htmlFor="busca" className="text-sm text-muted-foreground">
-                  Buscar por nome ou contato
-                </Label>
-                <Input
-                  id="busca"
-                  placeholder="Digite para filtrar"
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  className="mt-2"
-                />
-              </div>
-              <div className="flex gap-3">
-                <div>
-                  <Label className="text-sm text-muted-foreground">Filtrar por risco</Label>
-                  <Select value={riskFilter} onValueChange={(value) => setRiskFilter(value as RiskBadge | "todos") }>
-                    <SelectTrigger className="w-40 mt-2">
-                      <SelectValue placeholder="Todos" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todos">Todos</SelectItem>
-                      <SelectItem value="Baixo">Baixo</SelectItem>
-                      <SelectItem value="Moderado">Moderado</SelectItem>
-                      <SelectItem value="Alto">Alto</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-sm text-muted-foreground">Filtrar por região</Label>
-                  <Select value={regionFilter} onValueChange={(value) => setRegionFilter(value as string | "todas") }>
-                    <SelectTrigger className="w-44 mt-2">
-                      <SelectValue placeholder="Todas" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todas">Todas</SelectItem>
-                      {regions.map((region) => (
-                        <SelectItem key={region} value={region}>
-                          {region}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Select value={riskFilter} onValueChange={(value) => setRiskFilter(value as RiskBadge | "todos") }>
+                <SelectTrigger>
+                  <SelectValue placeholder="Filtro por risco" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os riscos</SelectItem>
+                  <SelectItem value="Baixo">Baixo risco</SelectItem>
+                  <SelectItem value="Moderado">Risco moderado</SelectItem>
+                  <SelectItem value="Alto">Alto risco</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={regionFilter} onValueChange={(value) => setRegionFilter(value as string | "todas") }>
+                <SelectTrigger>
+                  <SelectValue placeholder="Filtro por região" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">Todas as regiões</SelectItem>
+                  {regions.map((region) => (
+                    <SelectItem key={region} value={region}>
+                      {region}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                placeholder="Buscar por nome ou CPF"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-              <Badge variant="outline">Baixo risco: {summary.Baixo}</Badge>
-              <Badge variant="outline">Moderado: {summary.Moderado}</Badge>
-              <Badge variant="outline">Alto: {summary.Alto}</Badge>
-            </div>
-
-            <div className="overflow-x-auto rounded-md border border-primary/10">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-primary/5">
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Faixa etária</TableHead>
-                    <TableHead>Região/Bairro</TableHead>
-                    <TableHead>Contato</TableHead>
-                    <TableHead>Último teste</TableHead>
-                    <TableHead>Risco</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
+          <CardContent className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome completo</TableHead>
+                  <TableHead>Região/Bairro</TableHead>
+                  <TableHead>Contato</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Último teste</TableHead>
+                  <TableHead>Resultado</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredPatients.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                      Nenhum paciente encontrado com os filtros atuais.
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredPatients.map((patient) => (
+                ) : (
+                  filteredPatients.map((patient) => (
                     <TableRow key={patient.id} className="hover:bg-primary/5">
-                      <TableCell>{patient.nome}</TableCell>
-                      <TableCell>{patient.faixaEtaria}</TableCell>
-                      <TableCell>{patient.regiao}</TableCell>
-                      <TableCell>{patient.contato}</TableCell>
-                      <TableCell>{patient.teste}</TableCell>
+                      <TableCell className="font-semibold">{patient.nome}</TableCell>
+                      <TableCell>{patient.regiao ?? "—"}</TableCell>
+                      <TableCell>{patient.contatoTelefone ?? "—"}</TableCell>
+                      <TableCell>{patient.contatoEmail ?? "—"}</TableCell>
                       <TableCell>
-                        <Badge
-                          className={`px-3 py-1 ${
-                            patient.risco === "Alto"
-                              ? "bg-red-100 text-red-700"
-                              : patient.risco === "Moderado"
-                              ? "bg-yellow-100 text-yellow-700"
-                              : "bg-emerald-100 text-emerald-700"
-                          }`}
-                        >
-                          {patient.risco}
-                        </Badge>
+                        <div className="flex flex-col">
+                          <span className="font-medium text-primary">{patient.teste}</span>
+                          <span className="text-xs text-muted-foreground">{patient.data}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={badgeColor(patient.risco)}>{patient.risco}</Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" onClick={() => handleOpenRecord(patient)}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => navigate(`/especialista/pacientes/${patient.id}`)}
+                        >
                           Abrir ficha
                         </Button>
                       </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            {filteredPatients.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-6">
-                Nenhum paciente encontrado para os filtros selecionados.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-primary/20">
-          <CardHeader>
-            <CardTitle className="text-xl text-primary">Agilidade na triagem</CardTitle>
-            <CardDescription>
-              Utilize os dados mockados para testar fluxos de acompanhamento antes da integração completa com o backend.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">
-                A tabela acima espelha o estado final da aplicação, incluindo filtros, ações e exportação de dados anonimizados.
-              </p>
-            </div>
-            <Button variant="outline" onClick={() => navigate("/selecionar-teste")}>Iniciar nova triagem</Button>
+                  ))
+                )}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       </main>
@@ -386,4 +335,40 @@ const DashboardEspecialista = ({ user }: Props) => {
   );
 };
 
-export { DashboardEspecialista };
+type SummaryCardProps = {
+  title: string;
+  value: number;
+  icon: typeof Users;
+  color?: string;
+};
+
+const SummaryCard = ({ title, value, icon: Icon, color }: SummaryCardProps) => (
+  <Card>
+    <CardContent className="flex items-center gap-4 py-6">
+      <div className={`rounded-full bg-primary/10 p-3 ${color ?? "text-primary"}`}>
+        <Icon className="h-6 w-6" />
+      </div>
+      <div>
+        <p className="text-sm text-muted-foreground">{title}</p>
+        <p className="text-3xl font-bold">{value}</p>
+      </div>
+    </CardContent>
+  </Card>
+);
+
+function mapRisk(value: string | boolean): RiskBadge {
+  if (typeof value === "boolean") {
+    return value ? "Alto" : "Baixo";
+  }
+
+  const normalized = value.toLowerCase();
+  if (normalized.includes("alto")) return "Alto";
+  if (normalized.includes("moder")) return "Moderado";
+  return "Baixo";
+}
+
+function badgeColor(risk: RiskBadge) {
+  if (risk === "Baixo") return "bg-green-100 text-green-700";
+  if (risk === "Moderado") return "bg-yellow-100 text-yellow-700";
+  return "bg-red-100 text-red-700";
+}
