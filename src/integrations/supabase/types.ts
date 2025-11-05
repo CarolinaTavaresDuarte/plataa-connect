@@ -16,99 +16,147 @@ export type Database = {
     Tables: {
       aq10_responses: {
         Row: {
+          consentimento_pesquisa: boolean | null
           created_at: string
+          documento_cpf: string
           id: string
           pontuacao_total: number
           respostas: Json
+          screening_subject_id: string | null
           triagem_positiva: boolean
           user_id: string
         }
         Insert: {
+          consentimento_pesquisa?: boolean | null
           created_at?: string
+          documento_cpf: string
           id?: string
           pontuacao_total: number
           respostas: Json
+          screening_subject_id?: string | null
           triagem_positiva: boolean
           user_id: string
         }
         Update: {
+          consentimento_pesquisa?: boolean | null
           created_at?: string
+          documento_cpf?: string
           id?: string
           pontuacao_total?: number
           respostas?: Json
+          screening_subject_id?: string | null
           triagem_positiva?: boolean
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "aq10_responses_screening_subject_id_fkey"
+            columns: ["screening_subject_id"]
+            referencedRelation: "screening_subjects"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       assq_responses: {
         Row: {
+          consentimento_pesquisa: boolean | null
           created_at: string
+          documento_cpf: string
           id: string
           idade_anos: number
           nivel_risco: string
           pontuacao_total: number
           quem_responde: string
           respostas: Json
+          screening_subject_id: string | null
           user_id: string
         }
         Insert: {
+          consentimento_pesquisa?: boolean | null
           created_at?: string
+          documento_cpf: string
           id?: string
           idade_anos: number
           nivel_risco: string
           pontuacao_total: number
           quem_responde: string
           respostas: Json
+          screening_subject_id?: string | null
           user_id: string
         }
         Update: {
+          consentimento_pesquisa?: boolean | null
           created_at?: string
+          documento_cpf?: string
           id?: string
           idade_anos?: number
           nivel_risco?: string
           pontuacao_total?: number
           quem_responde?: string
           respostas?: Json
+          screening_subject_id?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "assq_responses_screening_subject_id_fkey"
+            columns: ["screening_subject_id"]
+            referencedRelation: "screening_subjects"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       mchat_responses: {
         Row: {
           aceita_compartilhar_dados: boolean | null
+          consentimento_pesquisa: boolean | null
           created_at: string
+          documento_cpf: string
           id: string
           idade_meses: number
           nivel_risco: string
           pontuacao_total: number
           quem_responde: string
           respostas: Json
+          screening_subject_id: string | null
           user_id: string
         }
         Insert: {
           aceita_compartilhar_dados?: boolean | null
+          consentimento_pesquisa?: boolean | null
           created_at?: string
+          documento_cpf: string
           id?: string
           idade_meses: number
           nivel_risco: string
           pontuacao_total: number
           quem_responde: string
           respostas: Json
+          screening_subject_id?: string | null
           user_id: string
         }
         Update: {
           aceita_compartilhar_dados?: boolean | null
+          consentimento_pesquisa?: boolean | null
           created_at?: string
+          documento_cpf?: string
           id?: string
           idade_meses?: number
           nivel_risco?: string
           pontuacao_total?: number
           quem_responde?: string
           respostas?: Json
+          screening_subject_id?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "mchat_responses_screening_subject_id_fkey"
+            columns: ["screening_subject_id"]
+            referencedRelation: "screening_subjects"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       profiles: {
         Row: {
@@ -169,6 +217,88 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      ibge_analysis_records: {
+        Row: {
+          consentimento_pesquisa: boolean
+          created_at: string
+          faixa_etaria: string | null
+          id: string
+          id_teste_anonimo: string
+          owner_user_id: string | null
+          regiao_geografica: string | null
+          score_bruto: number | null
+          test_type: string
+        }
+        Insert: {
+          consentimento_pesquisa?: boolean
+          created_at?: string
+          faixa_etaria?: string | null
+          id?: string
+          id_teste_anonimo?: string
+          owner_user_id?: string | null
+          regiao_geografica?: string | null
+          score_bruto?: number | null
+          test_type: string
+        }
+        Update: {
+          consentimento_pesquisa?: boolean
+          created_at?: string
+          faixa_etaria?: string | null
+          id?: string
+          id_teste_anonimo?: string
+          owner_user_id?: string | null
+          regiao_geografica?: string | null
+          score_bruto?: number | null
+          test_type?: string
+        }
+        Relationships: []
+      }
+      screening_subjects: {
+        Row: {
+          consentimento_pesquisa: boolean
+          contato_email: string
+          contato_telefone: string
+          created_at: string
+          documento_cpf: string
+          id: string
+          nome_completo: string
+          regiao_bairro: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          consentimento_pesquisa?: boolean
+          contato_email: string
+          contato_telefone: string
+          created_at?: string
+          documento_cpf: string
+          id?: string
+          nome_completo: string
+          regiao_bairro: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          consentimento_pesquisa?: boolean
+          contato_email?: string
+          contato_telefone?: string
+          created_at?: string
+          documento_cpf?: string
+          id?: string
+          nome_completo?: string
+          regiao_bairro?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "screening_subjects_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
       }
     }
     Views: {
