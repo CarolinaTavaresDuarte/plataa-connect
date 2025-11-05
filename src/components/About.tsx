@@ -44,7 +44,7 @@ export const About = () => {
               </div>
             </div>
 
-            <Button onClick={scrollToContato} variant="outline" size="lg">
+            <Button onClick={scrollToContato} variant="outline" size="lg" className="border-2 hover:bg-muted transition-smooth">
               Entre em Contato
             </Button>
           </div>
@@ -53,7 +53,7 @@ export const About = () => {
             <img
               src="https://images.unsplash.com/photo-1503454537195-1dcabb73ffb9?q=80&w=2086"
               alt="Apoio e inclusão"
-              className="rounded-lg shadow-lg w-full h-[400px] object-cover"
+              className="rounded-lg shadow-elegant w-full h-[400px] object-cover"
             />
           </div>
         </div>

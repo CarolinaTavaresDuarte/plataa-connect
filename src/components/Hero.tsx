@@ -12,14 +12,12 @@ export const Hero = () => {
   return (
     <section id="inicio" className="relative min-h-screen flex items-center justify-center overflow-hidden">
       <div 
-        className="absolute inset-0 bg-gradient-hero opacity-95"
+        className="absolute inset-0 bg-cover bg-center"
         style={{
           backgroundImage: "url('https://images.unsplash.com/photo-1516627145497-ae6968895b74?q=80&w=2070')",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          backgroundBlendMode: "overlay"
         }}
       />
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/90 via-primary/80 to-primary/70" />
       
       <div className="relative z-10 container mx-auto px-4 py-20 text-center text-white">
         <h1 className="text-5xl md:text-6xl font-bold mb-6 animate-fade-in">
@@ -35,7 +33,7 @@ export const Hero = () => {
         <Button 
           size="lg" 
           onClick={scrollToServicos}
-          className="bg-white text-primary hover:bg-white/90 shadow-lg text-lg px-8 py-6 gap-2"
+          className="bg-white text-primary hover:bg-white/90 shadow-elegant text-lg px-8 py-6 gap-2 transition-smooth"
         >
           Ver Serviços
           <ArrowRight className="h-5 w-5" />

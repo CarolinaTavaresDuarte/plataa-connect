@@ -49,15 +49,40 @@ const TesteASSQ = () => {
   const [resultado, setResultado] = useState<{ pontuacao: number; nivel: string } | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        navigate("/auth");
-      } else {
-        setUserId(session.user.id);
-        setLoading(false);
-      }
-    });
+    checkUserAndProfile();
   }, [navigate]);
+
+  const checkUserAndProfile = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      navigate("/auth");
+      return;
+    }
+
+    setUserId(session.user.id);
+
+    // Verificar se o usuário já preencheu os dados necessários
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("documento_cpf, teste_realizado")
+      .eq("user_id", session.user.id)
+      .single();
+
+    if (!profile?.documento_cpf) {
+      toast.error("Por favor, preencha seus dados antes de iniciar o teste");
+      navigate("/dados-pre-teste", { state: { testeDestino: "/testes/assq" } });
+      return;
+    }
+
+    if (profile.teste_realizado) {
+      toast.error("Você já realizou uma triagem anteriormente");
+      navigate("/dashboard");
+      return;
+    }
+
+    setLoading(false);
+  };
 
   const handleRespostaChange = (index: number, valor: number) => {
     setRespostas({ ...respostas, [index]: valor });
@@ -102,6 +127,12 @@ const TesteASSQ = () => {
       });
 
       if (error) throw error;
+
+      // Marcar que o usuário já realizou o teste
+      await supabase
+        .from("profiles")
+        .update({ teste_realizado: true })
+        .eq("user_id", userId);
 
       setResultado({ pontuacao, nivel });
       toast.success("Teste concluído com sucesso!");

@@ -37,9 +37,9 @@ export const HowItWorks = () => {
 
         <div className="grid md:grid-cols-4 gap-6">
           {steps.map((step, index) => (
-            <Card key={index} className="p-6 text-center hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                <step.icon className="h-6 w-6 text-primary" />
+            <Card key={index} className="p-6 text-center hover:shadow-elegant transition-smooth hover:-translate-y-1">
+              <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center mx-auto mb-4">
+                <step.icon className="h-6 w-6 text-white" />
               </div>
               <h3 className="font-bold mb-2">{step.title}</h3>
               <p className="text-sm text-muted-foreground">

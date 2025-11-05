@@ -112,26 +112,38 @@ export type Database = {
       }
       profiles: {
         Row: {
+          contato_telefone: string | null
           created_at: string
+          documento_cpf: string | null
           email: string
           id: string
           nome_completo: string
+          regiao_bairro: string | null
+          teste_realizado: boolean | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          contato_telefone?: string | null
           created_at?: string
+          documento_cpf?: string | null
           email: string
           id?: string
           nome_completo: string
+          regiao_bairro?: string | null
+          teste_realizado?: boolean | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          contato_telefone?: string | null
           created_at?: string
+          documento_cpf?: string | null
           email?: string
           id?: string
           nome_completo?: string
+          regiao_bairro?: string | null
+          teste_realizado?: boolean | null
           updated_at?: string
           user_id?: string
         }

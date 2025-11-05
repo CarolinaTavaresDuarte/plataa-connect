@@ -10,6 +10,8 @@ import Dashboard from "./pages/Dashboard";
 import TesteMChat from "./pages/TesteMChat";
 import TesteASSQ from "./pages/TesteASSQ";
 import TesteAQ10 from "./pages/TesteAQ10";
+import DadosPreTeste from "./pages/DadosPreTeste";
+import SelecionarTeste from "./pages/SelecionarTeste";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -25,9 +27,11 @@ const App = () => (
           <Route path="/landing" element={<Landing />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/testes/mchat" element={<TesteMChat />} />
-          <Route path="/testes/assq" element={<TesteASSQ />} />
-          <Route path="/testes/aq10" element={<TesteAQ10 />} />
+        <Route path="/dados-pre-teste" element={<DadosPreTeste />} />
+        <Route path="/selecionar-teste" element={<SelecionarTeste />} />
+        <Route path="/testes/mchat" element={<TesteMChat />} />
+        <Route path="/testes/assq" element={<TesteASSQ />} />
+        <Route path="/testes/aq10" element={<TesteAQ10 />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
